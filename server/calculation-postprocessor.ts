@@ -1062,6 +1062,24 @@ export function postProcessAnalysis(analysisResult: any): any {
         record["_tokenMultiplier"] = primaryDef.tokenMultiplier;
         record["_implementationMonths"] = primaryDef.implementationMonths;
       }
+
+      // Derive aiworkflow-compatible "Agentic Pattern" ID from Primary Pattern
+      const PATTERN_TO_AIWORKFLOW_ID: Record<string, string> = {
+        "Reflection": "reflection",
+        "Tool Use": "tool_use",
+        "Planning": "planning",
+        "ReAct Loop": "react",
+        "Prompt Chaining": "planning",
+        "Semantic Router": "planning",
+        "Constitutional Guardrail": "reflection",
+        "Orchestrator-Workers": "orchestrator_worker",
+        "Agent Handoff": "agent_handoff",
+        "Parallelization": "parallelization",
+        "Generator-Critic": "generator_critic",
+        "Group Chat": "group_chat",
+      };
+      const primaryPattern = record["Primary Pattern"] || "";
+      record["Agentic Pattern"] = PATTERN_TO_AIWORKFLOW_ID[primaryPattern] || record["Agentic Pattern"] || "tool_use";
     }
     console.log(`[postProcessAnalysis] Enriched ${step4.data.length} Step 4 records with agentic pattern metadata`);
   }

@@ -514,9 +514,14 @@ STEP 3: FRICTION POINT MAPPING
 - Rate severity: Critical/High/Medium
 - Each friction point must link to one of the 5 Strategic Themes from Step 1 via a "Strategic Theme" column
 - FUNCTION/SUB-FUNCTION CONSTRAINT: Use the SAME standardized Function and Sub-Function labels as Step 2. The Function/Sub-Function for a friction point MUST correspond to a Function/Sub-Function that has a KPI in Step 2.
+- FRICTION TYPE CLASSIFICATION: Classify each friction point into exactly one "Friction Type" category. MUST be one of these exact labels:
+  * "Process Friction" — Manual steps, handoffs, approval bottlenecks, redundant workflows
+  * "Data Friction" — Quality issues, availability gaps, data silos, inconsistent formats
+  * "Technology Friction" — Legacy systems, integration gaps, tool limitations, scalability constraints
+  * "Knowledge Friction" — Expertise gaps, training needs, institutional knowledge loss, documentation debt
 - STANDARDIZED ROLES REQUIREMENT: For each friction point, assign the most appropriate role from the standardized roles list provided below. Use the exact role name (capitalization and format must match EXACTLY). Use the corresponding loaded hourly rate from the standardized table.
 ${getStandardizedRolesPromptText()}
-Table columns: Friction Point, Function, Sub-Function, Estimated Annual Cost ($), Severity (Critical/High/Medium), Primary Driver Impact, Strategic Theme
+Table columns: Friction Point, Friction Type, Function, Sub-Function, Estimated Annual Cost ($), Severity (Critical/High/Medium), Primary Driver Impact, Strategic Theme
 
 STEP 4: AI USE CASE GENERATION
 Generate EXACTLY 10 use cases that:
@@ -532,8 +537,16 @@ Generate EXACTLY 10 use cases that:
   Available patterns (single-agent): Reflection, Tool Use, Planning, ReAct Loop, Prompt Chaining, Semantic Router, Constitutional Guardrail
   Available patterns (multi-agent): Orchestrator-Workers, Agent Handoff, Parallelization, Generator-Critic, Group Chat
   For each use case, choose the BEST-FIT primary pattern and a viable alternative. Consider complexity, cost, and time-to-value tradeoffs.
+✓ AGENTIC PATTERN ID: Also provide a lowercase underscore-format ID for the Primary Pattern using this exact mapping:
+  "Reflection" → "reflection", "Tool Use" → "tool_use", "Planning" → "planning", "ReAct Loop" → "react",
+  "Prompt Chaining" → "planning", "Semantic Router" → "planning", "Constitutional Guardrail" → "reflection",
+  "Orchestrator-Workers" → "orchestrator_worker", "Agent Handoff" → "agent_handoff",
+  "Parallelization" → "parallelization", "Generator-Critic" → "generator_critic", "Group Chat" → "group_chat"
 ✓ E.P.O.C.H. FLAGS: Flag use cases requiring human oversight for Ethical, Political, Operational, Creative, or Human-centric decisions.
-Table columns: ID, Use Case Name, Description, Target Friction, AI Primitives, Human-in-the-Loop Checkpoint, Function, Sub-Function, Strategic Theme, Primary Pattern, Alternative Pattern, Pattern Rationale, EPOCH Flags
+✓ DESIRED OUTCOMES: List 3-5 specific, measurable business outcomes expected from this use case (as a JSON array of strings)
+✓ DATA TYPES: List the types of data this use case processes (as a JSON array). Use ONLY these labels: "Structured", "Semi-structured", "Unstructured", "Real-time"
+✓ INTEGRATIONS: List 2-5 specific enterprise systems/tools that need integration (as a JSON array, e.g., ["Salesforce CRM", "SAP ERP", "Slack"])
+Table columns: ID, Use Case Name, Description, Target Friction, AI Primitives, Human-in-the-Loop Checkpoint, Function, Sub-Function, Strategic Theme, Primary Pattern, Alternative Pattern, Pattern Rationale, Agentic Pattern, EPOCH Flags, Desired Outcomes, Data Types, Integrations
 
 STEP 5: BENEFITS QUANTIFICATION BY DRIVER
 ALL 4 benefit types MUST use these EXACT standardized variable structures:
@@ -659,8 +672,8 @@ JSON structure:
     {"step": 0, "title": "Company Overview", "content": "Brief 2-3 sentence company overview. The structured companyOverview object contains authoritative company data: position, friction table, data readiness, and why now sections.", "data": null},
     {"step": 1, "title": "Strategic Anchoring & Business Drivers", "content": "brief intro", "data": [{"Strategic Theme": "...", "Primary Driver Impact": "...", "Secondary Driver": "...", "Current State": "...", "Target State": "..."}]},
     {"step": 2, "title": "Business Function Inventory & KPI Baselines", "content": "...", "data": [{"Function": "...", "Sub-Function": "...", "KPI Name": "...", "Baseline Value": "...", "Industry Benchmark": "...", "Target Value": "...", "Direction": "↑/↓", "Timeframe": "...", "Measurement Method": "..."}]},
-    {"step": 3, "title": "Friction Point Mapping", "content": "...", "data": [{"Function": "...", "Sub-Function": "...", "Friction Point": "...", "Severity": "Critical/High/Medium", "Primary Driver Impact": "...", "Estimated Annual Cost ($)": "..."}]},
-    {"step": 4, "title": "AI Use Case Generation", "content": "...", "data": [{"ID": "UC-01", "Use Case Name": "...", "Function": "...", "Sub-Function": "...", "AI Primitives": "...", "Description": "...", "Target Friction": "...", "Human-in-the-Loop Checkpoint": "...", "Primary Pattern": "Tool Use", "Alternative Pattern": "ReAct Loop", "Pattern Rationale": "Tool Use selected for retrieval-heavy workflow; ReAct Loop as alternative for iterative refinement", "EPOCH Flags": ""}]},
+    {"step": 3, "title": "Friction Point Mapping", "content": "...", "data": [{"Function": "...", "Sub-Function": "...", "Friction Point": "...", "Friction Type": "Process Friction|Data Friction|Technology Friction|Knowledge Friction", "Severity": "Critical/High/Medium", "Primary Driver Impact": "...", "Estimated Annual Cost ($)": "...", "Strategic Theme": "..."}]},
+    {"step": 4, "title": "AI Use Case Generation", "content": "...", "data": [{"ID": "UC-01", "Use Case Name": "...", "Function": "...", "Sub-Function": "...", "AI Primitives": "...", "Description": "...", "Target Friction": "...", "Human-in-the-Loop Checkpoint": "...", "Strategic Theme": "...", "Primary Pattern": "Tool Use", "Alternative Pattern": "ReAct Loop", "Pattern Rationale": "Tool Use selected for retrieval-heavy workflow; ReAct Loop as alternative for iterative refinement", "Agentic Pattern": "tool_use", "EPOCH Flags": "", "Desired Outcomes": ["Outcome 1", "Outcome 2", "Outcome 3"], "Data Types": ["Structured", "Unstructured"], "Integrations": ["System 1", "System 2"]}]},
     {"step": 5, "title": "Benefits Quantification by Driver", "content": "...", "data": [{"ID": "UC-01", "Use Case": "...", "Revenue Benefit ($)": "...", "Revenue Formula": "...", "Cost Benefit ($)": "...", "Cost Formula": "...", "Cash Flow Benefit ($)": "...", "Cash Flow Formula": "...", "Risk Benefit ($)": "...", "Risk Formula": "...", "Total Annual Value ($)": "...", "Probability of Success": 0.75}]},
     {"step": 6, "title": "Readiness & Token Modeling", "content": "...", "data": [{"ID": "UC-01", "Use Case": "...", "Organizational Capacity": 7, "Data Availability & Quality": 6, "Technical Infrastructure": 5, "Governance": 4, "Time-to-Value (months)": 6, "Input Tokens/Run": 800, "Output Tokens/Run": 800, "Runs/Month": 1000, "Monthly Tokens": 1600000, "Annual Token Cost ($)": "$..."}]},
     {"step": 7, "title": "Priority Scoring & Roadmap", "content": "...", "data": [{"ID": "UC-01", "Use Case": "...", "Priority Tier": "Champions", "Recommended Phase": "Q1", "Priority Score": 7.8, "Readiness Score": 5.5, "Value Score": 10.0, "TTV Score": 0.5}]}
