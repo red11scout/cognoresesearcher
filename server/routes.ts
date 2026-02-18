@@ -1008,10 +1008,21 @@ Return ONLY valid JSON with this structure:
         includeAssumptions ? (analysis.assumptions || {}) : undefined
       );
 
+      // Persist workflow data so GET endpoint works on subsequent visits
+      try {
+        const currentAnalysis = (report.analysisData as any) || {};
+        await storage.updateReport(id, {
+          analysisData: { ...currentAnalysis, workflowData: exportData }
+        });
+        console.log(`Workflow data persisted for report ${id} (${exportData.workflowData.length} workflows)`);
+      } catch (persistError) {
+        console.error("Failed to persist workflow data:", persistError);
+      }
+
       return res.json(exportData);
     } catch (error) {
       console.error("Workflow generation error:", error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: "Failed to generate workflows",
         message: error instanceof Error ? error.message : "Unknown error"
       });

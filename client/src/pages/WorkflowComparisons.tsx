@@ -1,10 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -30,7 +32,12 @@ import {
   Zap,
   Bot,
   AlertTriangle,
+  Loader2,
+  RefreshCw,
+  Users,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { WorkflowComparison } from "@/components/WorkflowComparison";
 import type {
   UseCaseWorkflowData,
@@ -39,6 +46,18 @@ import type {
   WorkflowDuration,
   AgenticPattern,
 } from "@shared/schema";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const MULTI_AGENT_PATTERNS = new Set<string>([
+  "Orchestrator-Workers",
+  "Agent Handoff",
+  "Parallelization",
+  "Generator-Critic",
+  "Group Chat",
+]);
 
 // ---------------------------------------------------------------------------
 // Duration helpers (mirrored from WorkflowComparison for summary stats)
@@ -92,6 +111,7 @@ function WorkflowCard({ workflow, onClick }: WorkflowCardProps) {
   const bottlenecks = workflow.currentStateWorkflow.filter(
     (s) => s.isBottleneck,
   );
+  const isMultiAgent = MULTI_AGENT_PATTERNS.has(workflow.agenticPattern || "");
 
   return (
     <Card
@@ -132,8 +152,18 @@ function WorkflowCard({ workflow, onClick }: WorkflowCardProps) {
           {workflow.agenticPattern && (
             <Badge
               variant="outline"
-              className="gap-1 px-1.5 py-0 text-[10px] border-[#001278]/30 text-[#001278] dark:border-[#001278]/50 dark:text-blue-300"
+              className={cn(
+                "gap-1 px-1.5 py-0 text-[10px]",
+                isMultiAgent
+                  ? "border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-300"
+                  : "border-[#001278]/30 text-[#001278] dark:border-[#001278]/50 dark:text-blue-300",
+              )}
             >
+              {isMultiAgent ? (
+                <Users className="h-3 w-3" />
+              ) : (
+                <Bot className="h-3 w-3" />
+              )}
               {workflow.agenticPattern}
             </Badge>
           )}
@@ -156,6 +186,30 @@ function WorkflowCard({ workflow, onClick }: WorkflowCardProps) {
           <div className="flex items-center gap-1.5 text-xs text-[#36bf78]">
             <Zap className="h-3.5 w-3.5" />
             <span className="font-semibold">{formatDuration(savedMin)} saved</span>
+          </div>
+        )}
+
+        {/* Comparison metrics */}
+        {workflow.comparisonMetrics && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2 dark:border-slate-800">
+            {workflow.comparisonMetrics.costReduction?.improvement && (
+              <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <TrendingUp className="h-3 w-3 text-[#36bf78]" />
+                <span>Cost: {workflow.comparisonMetrics.costReduction.improvement}</span>
+              </div>
+            )}
+            {workflow.comparisonMetrics.qualityImprovement?.improvement && (
+              <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <TrendingUp className="h-3 w-3 text-[#02a2fd]" />
+                <span>Quality: {workflow.comparisonMetrics.qualityImprovement.improvement}</span>
+              </div>
+            )}
+            {workflow.comparisonMetrics.errorReduction?.improvement && (
+              <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <TrendingUp className="h-3 w-3 text-emerald-500" />
+                <span>Errors: {workflow.comparisonMetrics.errorReduction.improvement}</span>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
@@ -261,6 +315,9 @@ export default function WorkflowComparisons() {
   const [, params] = useRoute("/reports/:reportId/workflows");
   const [, setLocation] = useLocation();
   const reportId = params?.reportId;
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const hasAttemptedGeneration = useRef(false);
 
   // Filter state
   const [themeFilter, setThemeFilter] = useState<string>("all");
@@ -271,7 +328,14 @@ export default function WorkflowComparisons() {
   const [selectedWorkflow, setSelectedWorkflow] =
     useState<UseCaseWorkflowData | null>(null);
 
-  // Fetch workflow data
+  // Generation state
+  const [generationState, setGenerationState] = useState<
+    "idle" | "generating" | "complete" | "error"
+  >("idle");
+  const [generationMessage, setGenerationMessage] = useState("");
+  const [simulatedProgress, setSimulatedProgress] = useState(0);
+
+  // Fetch workflow data (GET — works when data is persisted)
   const {
     data: exportData,
     isLoading,
@@ -279,6 +343,7 @@ export default function WorkflowComparisons() {
   } = useQuery<WorkflowExportData>({
     queryKey: [`/api/reports/${reportId}/workflows`],
     enabled: !!reportId,
+    retry: false,
   });
 
   // Also fetch the report for strategic theme info
@@ -286,6 +351,88 @@ export default function WorkflowComparisons() {
     queryKey: [`/api/reports/${reportId}`],
     enabled: !!reportId,
   });
+
+  // Mutation: trigger workflow generation via POST
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      setGenerationState("generating");
+      setGenerationMessage("Initializing workflow generation...");
+
+      const res = await apiRequest(
+        "POST",
+        `/api/reports/${reportId}/workflows`,
+        {
+          format: "enhanced",
+          detailLevel: "standard",
+          includeAgenticPatterns: true,
+          includeAssumptions: true,
+          includeMiroMetadata: true,
+        },
+      );
+
+      return (await res.json()) as WorkflowExportData;
+    },
+    onSuccess: (data) => {
+      setGenerationState("complete");
+      setGenerationMessage(
+        `Generated ${data.workflowData.length} workflow comparisons`,
+      );
+      // Set query data directly so the gallery renders immediately
+      queryClient.setQueryData(
+        [`/api/reports/${reportId}/workflows`],
+        data,
+      );
+      toast({
+        title: "Workflows Generated",
+        description: `${data.workflowData.length} AI workflow comparisons are ready.`,
+      });
+    },
+    onError: (err: Error) => {
+      setGenerationState("error");
+      setGenerationMessage(
+        err.message || "Failed to generate workflows",
+      );
+      toast({
+        title: "Generation Failed",
+        description:
+          err.message || "Could not generate workflow comparisons.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Auto-trigger generation when GET returns 404 (workflows not yet generated)
+  useEffect(() => {
+    if (
+      !isLoading &&
+      error &&
+      !exportData &&
+      !hasAttemptedGeneration.current &&
+      !generateMutation.isPending &&
+      reportId
+    ) {
+      hasAttemptedGeneration.current = true;
+      generateMutation.mutate();
+    }
+  }, [isLoading, error, exportData, reportId]);
+
+  // Simulated progress bar (caps at 90% until real completion)
+  useEffect(() => {
+    if (generationState !== "generating") {
+      if (generationState === "complete") {
+        setSimulatedProgress(100);
+      }
+      return;
+    }
+    setSimulatedProgress(5);
+    const interval = setInterval(() => {
+      setSimulatedProgress((prev) => {
+        if (prev >= 90) return prev;
+        return Math.min(90, prev + Math.random() * 8 + 2);
+      });
+    }, 800);
+    return () => clearInterval(interval);
+  }, [generationState]);
 
   const workflows = exportData?.workflowData ?? [];
 
@@ -329,10 +476,7 @@ export default function WorkflowComparisons() {
       if (patternFilter !== "all" && w.agenticPattern !== patternFilter) {
         return false;
       }
-      // Theme filtering: match against use case name or business function heuristically,
-      // or check the patternMapping if available
       if (themeFilter !== "all") {
-        // A simple approach: check if any related field contains the theme text
         const wStr =
           `${w.useCaseName} ${w.businessFunction} ${w.patternRationale ?? ""}`.toLowerCase();
         if (!wStr.includes(themeFilter.toLowerCase())) {
@@ -353,7 +497,121 @@ export default function WorkflowComparisons() {
     setFunctionFilter("all");
   };
 
-  // Loading state
+  // Regenerate handler
+  const handleRegenerate = () => {
+    hasAttemptedGeneration.current = false;
+    setGenerationState("idle");
+    setSimulatedProgress(0);
+    queryClient.removeQueries({
+      queryKey: [`/api/reports/${reportId}/workflows`],
+    });
+    generateMutation.mutate();
+  };
+
+  // =========================================================================
+  // RENDER: GENERATING STATE
+  // =========================================================================
+
+  if (generateMutation.isPending || generationState === "generating") {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="mx-auto max-w-2xl px-6 pt-24">
+          <div className="text-center">
+            {/* Animated icon */}
+            <div className="relative mx-auto mb-8 h-20 w-20">
+              <div className="absolute inset-0 rounded-full bg-[#02a2fd]/20 blur-xl animate-pulse" />
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <Loader2 className="h-10 w-10 text-[#02a2fd] animate-spin" />
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+              Generating Workflow Comparisons
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-8">
+              AI is analyzing each use case to build current-state vs
+              AI-powered-state workflows with agentic pattern recommendations...
+            </p>
+
+            {/* Progress bar */}
+            <div className="mx-auto max-w-md mb-4">
+              <Progress
+                value={simulatedProgress}
+                className="h-2"
+              />
+            </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-2">
+              {Math.round(simulatedProgress)}% complete
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              This may take 30–60 seconds depending on the number of use cases
+            </p>
+
+            {/* Skeleton preview of what's coming */}
+            <div className="mt-12 grid grid-cols-2 gap-4 opacity-20">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-3/4 bg-slate-300 dark:bg-slate-700" />
+                  <Skeleton className="h-24 rounded-lg bg-slate-200 dark:bg-slate-800" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // RENDER: ERROR STATE (generation attempted but failed)
+  // =========================================================================
+
+  if (
+    generationState === "error" ||
+    (error && hasAttemptedGeneration.current && !exportData)
+  ) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <Card className="w-full max-w-md border-red-200">
+          <CardHeader>
+            <CardTitle className="text-red-600">
+              Workflow Generation Failed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              {generationMessage ||
+                "Unable to generate workflow comparisons. The report may not contain enough use case data."}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleRegenerate}
+                variant="outline"
+                size="sm"
+                disabled={generateMutation.isPending}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+              <Button
+                onClick={() => setLocation(`/dashboard/${reportId}`)}
+                variant="ghost"
+                size="sm"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Dashboard
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // RENDER: LOADING STATE (initial GET in flight)
+  // =========================================================================
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 p-6 dark:bg-slate-950 sm:p-8">
@@ -376,37 +634,14 @@ export default function WorkflowComparisons() {
     );
   }
 
-  // Error state
-  if (error || !exportData) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Card className="w-full max-w-md border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-600">
-              {error ? "Error Loading Workflows" : "No Workflow Data"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-              {error
-                ? "Failed to load workflow comparison data. The workflows may not have been generated yet."
-                : "No workflow data found for this report. Generate workflows first using the report page."}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setLocation(`/dashboard/${reportId}`)}
-                variant="outline"
-                size="sm"
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Dashboard
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
+  // Waiting for auto-generation to kick in (shouldn't normally reach here)
+  if (!exportData) {
+    return null;
   }
+
+  // =========================================================================
+  // RENDER: GALLERY (success state)
+  // =========================================================================
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -440,6 +675,22 @@ export default function WorkflowComparisons() {
               Current vs AI-powered process workflows across all use cases
             </p>
           </div>
+
+          {/* Regenerate button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRegenerate}
+            disabled={generateMutation.isPending}
+            className="gap-1.5 self-start"
+          >
+            {generateMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Regenerate
+          </Button>
         </div>
 
         {/* ===== Summary Stats ===== */}
