@@ -6,7 +6,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Workflow, Loader2, FileJson, CheckCircle2, AlertCircle, Files, FileText } from "lucide-react";
+import { Download, Workflow, Loader2, FileJson, CheckCircle2, AlertCircle, Files, FileText, Eye } from "lucide-react";
 
 interface WorkflowExportPanelProps {
   reportId: string;
@@ -513,6 +513,24 @@ export function WorkflowExportPanel({ reportId, companyName, analysisData, onExp
               <li>• HITL checkpoints</li>
               <li>• Bottleneck analysis</li>
             </ul>
+          </div>
+
+          {/* Visual Comparisons Link */}
+          <div className="border-t pt-4 mt-4">
+            <p className="text-sm text-muted-foreground mb-2">
+              Want to see side-by-side workflow visualizations?
+            </p>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setIsOpen(false);
+                window.location.href = `/reports/${reportId}/workflows`;
+              }}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              View Workflow Comparisons
+            </Button>
           </div>
         </div>
 

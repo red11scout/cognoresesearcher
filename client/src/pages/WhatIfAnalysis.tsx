@@ -67,7 +67,9 @@ import {
   DollarSign,
   ChevronRight,
   HelpCircle,
-  FunctionSquare
+  FunctionSquare,
+  Layers,
+  BarChart3
 } from "lucide-react";
 
 interface StepData {
@@ -187,6 +189,15 @@ export default function WhatIfAnalysis() {
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [guidanceStep, setGuidanceStep] = useState(0);
 
+  // Scenario management states
+  const [scenarioName, setScenarioName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSavedScenarios, setShowSavedScenarios] = useState(false);
+  const [scenarios, setScenarios] = useState<any[]>([]);
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [comparisonData, setComparisonData] = useState<any>(null);
+  const [showComparison, setShowComparison] = useState(false);
+
   // Formula Explorer state
   const [formulaExplorerOpen, setFormulaExplorerOpen] = useState(false);
   const [selectedFormulaField, setSelectedFormulaField] = useState<{
@@ -236,6 +247,97 @@ export default function WhatIfAnalysis() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fetch saved scenarios on mount
+  useEffect(() => {
+    fetchScenarios();
+  }, [reportId]);
+
+  // Fetch saved scenarios
+  const fetchScenarios = async () => {
+    if (!reportId) return;
+    try {
+      const res = await fetch(`/api/reports/${reportId}/scenarios`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setScenarios(data);
+      }
+    } catch (e) { console.error('Failed to fetch scenarios', e); }
+  };
+
+  // Save current state as scenario
+  const saveScenario = async () => {
+    if (!reportId || !scenarioName.trim()) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/reports/${reportId}/scenarios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: scenarioName.trim(),
+          description: `What-if scenario created ${new Date().toLocaleDateString()}`,
+          assumptions: analysisData || {},
+          results: analysisData || {},
+        }),
+      });
+      if (res.ok) {
+        toast({ title: "Scenario Saved", description: `"${scenarioName}" saved successfully.` });
+        setScenarioName("");
+        fetchScenarios();
+      } else {
+        toast({ title: "Error", description: "Failed to save scenario.", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to save scenario.", variant: "destructive" });
+    }
+    setIsSaving(false);
+  };
+
+  // Load a scenario
+  const loadScenario = (scenario: any) => {
+    if (scenario.assumptionsJson) {
+      setAnalysisData(scenario.assumptionsJson);
+      toast({ title: "Scenario Loaded", description: `Loaded "${scenario.name}"` });
+    }
+  };
+
+  // Delete a scenario
+  const deleteScenario = async (id: string) => {
+    try {
+      const res = await fetch(`/api/scenarios/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) {
+        toast({ title: "Deleted", description: "Scenario deleted." });
+        fetchScenarios();
+        setSelectedForCompare(prev => prev.filter(sid => sid !== id));
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to delete.", variant: "destructive" });
+    }
+  };
+
+  // Compare selected scenarios
+  const compareSelectedScenarios = async () => {
+    if (selectedForCompare.length < 2 || !reportId) return;
+    try {
+      const ids = selectedForCompare.join(',');
+      const res = await fetch(`/api/reports/${reportId}/scenarios/compare?ids=${ids}`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setComparisonData(data);
+        setShowComparison(true);
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to compare scenarios.", variant: "destructive" });
+    }
+  };
+
+  // Toggle scenario selection for comparison
+  const toggleCompareSelection = (id: string) => {
+    setSelectedForCompare(prev =>
+      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+    );
   };
 
   const getCurrentStepData = (): any[] => {
@@ -736,6 +838,111 @@ export default function WhatIfAnalysis() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Scenario Management Bar */}
+        <div className="bg-white border rounded-lg p-4 mb-4 flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px]">
+            <Input
+              placeholder="Scenario name..."
+              value={scenarioName}
+              onChange={(e) => setScenarioName(e.target.value)}
+              className="max-w-xs"
+            />
+          </div>
+          <Button
+            onClick={saveScenario}
+            disabled={!scenarioName.trim() || isSaving}
+            size="sm"
+          >
+            <Save className="h-4 w-4 mr-1.5" />
+            Save Scenario
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSavedScenarios(!showSavedScenarios)}
+          >
+            <Layers className="h-4 w-4 mr-1.5" />
+            Saved ({scenarios.length})
+          </Button>
+          {selectedForCompare.length >= 2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={compareSelectedScenarios}
+            >
+              <BarChart3 className="h-4 w-4 mr-1.5" />
+              Compare ({selectedForCompare.length})
+            </Button>
+          )}
+        </div>
+
+        {/* Saved Scenarios Panel */}
+        {showSavedScenarios && scenarios.length > 0 && (
+          <div className="bg-white border rounded-lg p-4 mb-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">Saved Scenarios</h3>
+            <div className="space-y-2">
+              {scenarios.map((s: any) => (
+                <div key={s.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded border hover:bg-slate-100 transition">
+                  <input
+                    type="checkbox"
+                    checked={selectedForCompare.includes(String(s.id))}
+                    onChange={() => toggleCompareSelection(String(s.id))}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{s.name}</div>
+                    <div className="text-xs text-slate-400">
+                      {new Date(s.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => loadScenario(s)}>
+                    Load
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700" onClick={() => deleteScenario(String(s.id))}>
+                    Delete
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scenario Comparison View */}
+        {showComparison && comparisonData?.scenarios && (
+          <div className="bg-white border rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700">Scenario Comparison</h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowComparison(false)}>Close</Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="text-left p-2 font-medium text-slate-600">Field</th>
+                    {comparisonData.scenarios.map((s: any) => (
+                      <th key={s.id} className="text-left p-2 font-medium text-slate-600">{s.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t">
+                    <td className="p-2 text-slate-500">Created</td>
+                    {comparisonData.scenarios.map((s: any) => (
+                      <td key={s.id} className="p-2">{new Date(s.createdAt).toLocaleDateString()}</td>
+                    ))}
+                  </tr>
+                  <tr className="border-t">
+                    <td className="p-2 text-slate-500">Description</td>
+                    {comparisonData.scenarios.map((s: any) => (
+                      <td key={s.id} className="p-2">{s.description || '—'}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Step Tabs */}
         <Tabs value={String(activeStep)} onValueChange={(v) => setActiveStep(parseInt(v))}>

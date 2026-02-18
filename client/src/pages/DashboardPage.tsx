@@ -6,7 +6,7 @@ import { mapReportToDashboardData } from "@/lib/dashboardMapper";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, GitCompare, Calculator, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ShareModal } from "@/components/dashboard/share-modal";
 
@@ -91,7 +91,36 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Dashboard 
+      {/* Feature Navigation */}
+      <div className="max-w-7xl mx-auto px-4 pt-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLocation(`/report?company=${encodeURIComponent(report?.companyName || '')}`)}
+          >
+            <FileText className="h-4 w-4 mr-1.5" />
+            Full Report
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLocation(`/reports/${reportId}/workflows`)}
+          >
+            <GitCompare className="h-4 w-4 mr-1.5" />
+            Workflow Comparisons
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLocation(`/whatif/${reportId}`)}
+          >
+            <Calculator className="h-4 w-4 mr-1.5" />
+            What-If Analysis
+          </Button>
+        </div>
+      </div>
+      <Dashboard
         data={dashboardData}
         onShareUrl={handleShareUrl}
         onDownloadWorkshopPDF={handleDownloadWorkshopPDF}

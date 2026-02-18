@@ -49,7 +49,7 @@ CRITICAL REQUIREMENTS:
 
 OUTPUT FORMAT (strict JSON):
 {
-  "agenticPattern": "One of: Orchestrator-Workers, Semantic Router, ReAct Loop, Drafter-Critic, Constitutional Guardrail, RAG Detective, Memetic Agent, Human-in-the-Loop",
+  "agenticPattern": "One of: Reflection, Tool Use, Planning, ReAct Loop, Prompt Chaining, Semantic Router, Constitutional Guardrail, Orchestrator-Workers, Agent Handoff, Parallelization, Generator-Critic, Group Chat",
   "patternRationale": "2-3 sentences explaining why this pattern fits",
   "currentStateWorkflow": [
     {
@@ -154,7 +154,7 @@ Exactly 1-2 steps must have isHumanInTheLoop: true for oversight
 
 ## OUTPUT FORMAT (strict JSON only, no markdown):
 {
-  "agenticPattern": "Semantic Router|Orchestrator-Workers|ReAct Loop|Drafter-Critic|Constitutional Guardrail|RAG Detective|Memetic Agent|Human-in-the-Loop",
+  "agenticPattern": "Reflection|Tool Use|Planning|ReAct Loop|Prompt Chaining|Semantic Router|Constitutional Guardrail|Orchestrator-Workers|Agent Handoff|Parallelization|Generator-Critic|Group Chat",
   "patternRationale": "2-3 sentences explaining pattern selection",
   "currentStateWorkflow": [
     {

@@ -49,7 +49,7 @@ import {
   DollarSign, ShieldCheck, Zap, Target, ChevronDown, ChevronRight,
   Settings2, HelpCircle, Info, Sliders, BarChart3, Building2,
   Users, ClipboardList, Lightbulb, Scale, MapPin, Save, Layers, Share2, LayoutDashboard,
-  Menu, X
+  Menu, X, GitCompare, PlusCircle, Workflow
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from 'jspdf';
@@ -61,6 +61,7 @@ import blueAllyLogoUrl from '@assets/image_1764369352062.png';
 import blueAllyLogoWhiteUrl from '@assets/blueally-logo-white.png';
 import { WorkflowExportPanel } from "@/components/report/WorkflowExportPanel";
 import { generateBoardPresentationPDF } from "@/lib/pdfGenerator";
+import { CustomDataEditor } from "@/components/CustomDataEditor";
 import { STEP_COLUMN_ORDER, COLUMN_NAME_ALIASES } from "@shared/taxonomy";
 
 // ===== COLUMN ORDERING & TAXONOMY =====
@@ -72,6 +73,7 @@ const HIDDEN_COLUMNS = new Set([
   "Cost Formula Labels", "Revenue Formula Labels", "Cash Flow Formula Labels", "Risk Formula Labels",
   "Annual Hours", "Hourly Rate", "Measurement Method",
   "Friction Point", // Only hidden when it's a "Target Friction" alias scenario
+  "_patternType", "_patternComplexity", "_tokenMultiplier", "_implementationMonths",
 ]);
 
 function reorderAndFilterColumns(data: any[], stepNum: number): any[] {
@@ -460,7 +462,8 @@ export default function Report() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [assumptionEdits, setAssumptionEdits] = useState<Record<string, string>>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  
+  const [customEditorOpen, setCustomEditorOpen] = useState(false);
+
   // Section refs for navigation
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -2956,11 +2959,53 @@ export default function Report() {
               </DropdownMenu>
               
               {reportId && (
-                <WorkflowExportPanel 
-                  reportId={reportId} 
+                <WorkflowExportPanel
+                  reportId={reportId}
                   companyName={companyName}
                   analysisData={data}
                 />
+              )}
+
+              {/* Feature Navigation Buttons */}
+              {reportId && status === "complete" && (
+                <div className="flex items-center gap-2 ml-2 border-l border-slate-200 pl-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLocation(`/dashboard/${reportId}`)}
+                    className="h-10 md:h-9 px-2 md:px-3 text-xs md:text-sm"
+                  >
+                    <LayoutDashboard className="h-4 w-4 md:mr-1.5" />
+                    <span className="hidden lg:inline">Dashboard</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLocation(`/reports/${reportId}/workflows`)}
+                    className="h-10 md:h-9 px-2 md:px-3 text-xs md:text-sm"
+                  >
+                    <GitCompare className="h-4 w-4 md:mr-1.5" />
+                    <span className="hidden lg:inline">Workflows</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setLocation(`/whatif/${reportId}`)}
+                    className="h-10 md:h-9 px-2 md:px-3 text-xs md:text-sm"
+                  >
+                    <Calculator className="h-4 w-4 md:mr-1.5" />
+                    <span className="hidden lg:inline">What-If</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCustomEditorOpen(true)}
+                    className="h-10 md:h-9 px-2 md:px-3 text-xs md:text-sm"
+                  >
+                    <PlusCircle className="h-4 w-4 md:mr-1.5" />
+                    <span className="hidden lg:inline">Add Data</span>
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -3352,6 +3397,19 @@ export default function Report() {
           </div>
         </div>
       </div>
+
+      {/* Custom Data Editor Dialog */}
+      <CustomDataEditor
+        reportId={reportId || ""}
+        isOpen={customEditorOpen}
+        onClose={() => {
+          setCustomEditorOpen(false);
+          // Refetch report data to include any new custom data
+          if (reportId) {
+            fetchAnalysis();
+          }
+        }}
+      />
     </Layout>
   );
 }
@@ -3819,6 +3877,160 @@ function StepCard({ step }: { step: any }) {
               </Table>
             </div>
           </div>);
+        })()
+        : step.step === 4 && hasData ? (() => {
+          // ===== STEP 4: AI USE CASES WITH PATTERN CARDS =====
+          const reorderedData = reorderAndFilterColumns(step.data, step.step);
+          const hasStrategicThemes = reorderedData.some((r: any) => r['Strategic Theme']);
+          const themeGroups = hasStrategicThemes ? groupByStrategicTheme(reorderedData) : null;
+          const themeNames = themeGroups ? Array.from(themeGroups.keys()) : [];
+
+          const getPatternBadgeColor = (pattern: string) => {
+            const singleAgent = ['Reflection', 'Tool Use', 'Planning', 'ReAct Loop', 'Prompt Chaining', 'Semantic Router', 'Constitutional Guardrail'];
+            if (singleAgent.some(p => pattern?.includes(p))) return 'bg-[#001278] text-white';
+            return 'bg-[#02a2fd] text-white'; // multi-agent
+          };
+
+          const getEpochBadge = (flag: string) => {
+            const colors: Record<string, string> = {
+              'E': 'bg-red-100 text-red-700 border-red-200',
+              'P': 'bg-orange-100 text-orange-700 border-orange-200',
+              'O': 'bg-yellow-100 text-yellow-700 border-yellow-200',
+              'C': 'bg-purple-100 text-purple-700 border-purple-200',
+              'H': 'bg-blue-100 text-blue-700 border-blue-200',
+            };
+            const labels: Record<string, string> = {
+              'E': 'Ethical', 'P': 'Political', 'O': 'Operational', 'C': 'Creative', 'H': 'Human-centric'
+            };
+            return { color: colors[flag] || 'bg-gray-100 text-gray-700', label: labels[flag] || flag };
+          };
+
+          const renderUseCaseCards = (rows: any[]) => (
+            <div className="space-y-4">
+              {rows.map((row: any, i: number) => {
+                return (
+                  <div key={i} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                    {/* Card Header */}
+                    <div className="bg-slate-50 px-4 py-3 border-b flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-mono text-slate-400">{row.ID}</span>
+                      <span className="font-semibold text-sm md:text-base text-slate-800 flex-1">{row['Use Case Name']}</span>
+                      {row['Primary Pattern'] && (
+                        <span className={`text-[10px] md:text-xs px-2 py-0.5 rounded-full font-medium ${getPatternBadgeColor(row['Primary Pattern'])}`}>
+                          {row['Primary Pattern']}
+                        </span>
+                      )}
+                      {row['Function'] && (
+                        <span className="text-[10px] md:text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                          {row['Function']}
+                        </span>
+                      )}
+                    </div>
+                    {/* Card Body */}
+                    <div className="p-4 space-y-3">
+                      {/* Description */}
+                      {row['Description'] && (
+                        <p className="text-xs md:text-sm text-slate-600 leading-relaxed">{row['Description']}</p>
+                      )}
+
+                      {/* Target Friction + Primitives */}
+                      <div className="flex flex-wrap gap-4 text-xs md:text-sm">
+                        {row['Target Friction'] && (
+                          <div>
+                            <span className="text-slate-400 font-medium">Target Friction: </span>
+                            <span className="text-slate-700">{row['Target Friction']}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* AI Primitives as tags */}
+                      {row['AI Primitives'] && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {String(row['AI Primitives']).split(',').map((p: string, j: number) => (
+                            <span key={j} className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {p.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Pattern Comparison Section */}
+                      {(row['Primary Pattern'] || row['Alternative Pattern']) && (
+                        <div className="bg-slate-50 rounded-lg p-3 border space-y-2">
+                          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Agentic Pattern Analysis</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {/* Primary */}
+                            <div className="space-y-1">
+                              <div className="text-[10px] text-slate-400 font-medium">PRIMARY PATTERN</div>
+                              <span className={`inline-block text-xs px-2.5 py-1 rounded-md font-medium ${getPatternBadgeColor(row['Primary Pattern'])}`}>
+                                {row['Primary Pattern'] || 'Not assigned'}
+                              </span>
+                            </div>
+                            {/* Alternative */}
+                            <div className="space-y-1">
+                              <div className="text-[10px] text-slate-400 font-medium">ALTERNATIVE PATTERN</div>
+                              <span className={`inline-block text-xs px-2.5 py-1 rounded-md font-medium ${row['Alternative Pattern'] ? getPatternBadgeColor(row['Alternative Pattern']) + ' opacity-75' : 'bg-slate-200 text-slate-500'}`}>
+                                {row['Alternative Pattern'] || 'None'}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Rationale */}
+                          {row['Pattern Rationale'] && (
+                            <div className="mt-2 pt-2 border-t border-slate-200">
+                              <div className="text-[10px] text-slate-400 font-medium mb-1">RATIONALE</div>
+                              <p className="text-xs text-slate-600 leading-relaxed">{row['Pattern Rationale']}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* EPOCH Flags */}
+                      {row['EPOCH Flags'] && String(row['EPOCH Flags']).trim() && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase">E.P.O.C.H.:</span>
+                          {String(row['EPOCH Flags']).split(',').map((flag: string, j: number) => {
+                            const f = flag.trim().charAt(0).toUpperCase();
+                            const badge = getEpochBadge(f);
+                            return (
+                              <span key={j} className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* HITL Checkpoint */}
+                      {row['Human-in-the-Loop Checkpoint'] && (
+                        <div className="text-xs text-blue-600 flex items-center gap-1.5 bg-blue-50 px-2 py-1.5 rounded border border-blue-200">
+                          <Users className="h-3.5 w-3.5" />
+                          <span className="font-medium">HITL:</span> {row['Human-in-the-Loop Checkpoint']}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+
+          return (
+            <div className="space-y-3">
+              {themeGroups ? (
+                themeNames.map((theme, ti) => (
+                  <div key={ti}>
+                    <div className="flex items-center gap-2 mb-3 mt-4">
+                      <div className="h-1 w-4 rounded bg-[#001278]"></div>
+                      <h4 className="text-sm font-semibold text-[#001278]">{theme}</h4>
+                      <span className="text-xs text-slate-400">({themeGroups.get(theme)?.length} use cases)</span>
+                    </div>
+                    {renderUseCaseCards(themeGroups.get(theme) || [])}
+                  </div>
+                ))
+              ) : (
+                renderUseCaseCards(reorderedData)
+              )}
+            </div>
+          );
         })()
         : hasData ? (() => {
           // ===== GENERIC TABLE WITH COLUMN REORDERING + BENCHMARK COLORS + STRATEGIC THEME GROUPING =====
