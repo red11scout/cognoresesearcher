@@ -1,4 +1,19 @@
-// src/calc/engine.ts
+/**
+ * src/calc/engine.ts — HyperFormula Integration Layer
+ *
+ * HyperFormula is used for three purposes:
+ *   1. **Test validation** — verifies that deterministic TypeScript formulas in
+ *      formulas.ts produce the same results as equivalent spreadsheet expressions.
+ *   2. **Educational Formula Explorer UI** — powers the interactive FormulaExplorer
+ *      component where users can inspect and experiment with formula cells.
+ *   3. **What-if scenario sheets** — provides a spreadsheet-style engine for
+ *      user-driven what-if analysis with live cell recalculation.
+ *
+ * IMPORTANT: HyperFormula is NOT in the critical path for production calculations.
+ * Core pipeline calculations (benefit formulas, priority scoring, readiness scoring,
+ * cross-validation, multi-year projections) all use the deterministic TypeScript
+ * functions defined in formulas.ts. Those functions are the source of truth.
+ */
 import { HyperFormula, Sheet, RawCellContent } from 'hyperformula';
 
 export type NamedInputMap = Record<string, number>;
